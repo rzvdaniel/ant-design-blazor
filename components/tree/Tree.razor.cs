@@ -140,6 +140,12 @@ namespace AntDesign
         public EventCallback<TItem> SelectedDataChanged { get; set; }
 
         /// <summary>
+        /// Raises a callback with the dragged item as parameter
+        /// </summary>
+        [Parameter]
+        public EventCallback<TItem> OnNodeDrag { get; set; }
+
+        /// <summary>
         /// 选择的Key集合
         /// </summary>
         [Parameter]
@@ -305,6 +311,12 @@ namespace AntDesign
         /// </summary>
         [Parameter]
         public Func<TreeNode<TItem>, string> IconExpression { get; set; }
+
+        /// <summary>
+        /// 指定一个返回节点名称的方法。
+        /// </summary>
+        [Parameter]
+        public Func<TreeNode<TItem>, bool> DraggableExpression { get; set; }
 
         /// <summary>
         /// 返回一个值是否是页节点

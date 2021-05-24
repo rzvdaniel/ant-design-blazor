@@ -5,7 +5,7 @@
 @if (RealDisplay)
 {
     <CascadingValue Value="this" Name="SelfNode">
-        <div @key="NodeId" class="@ClassMapper.Class" style="@Style">
+        <div @key="NodeId" class="@ClassMapper.Class" style="@Style" draggable="true" aria-grabbed="@Draggable" @ondragstart="()=>OnDragStart(this.DataItem)">
 
             <TreeIndent TreeLevel="@TreeLevel" TItem="TItem"></TreeIndent>
 
@@ -36,3 +36,10 @@
         @Nodes
     }
 </CascadingValue>
+
+@code {
+    public void OnDragStart(TItem item)
+    {
+        TreeComponent.OnNodeDrag.InvokeAsync(item);
+    }
+}

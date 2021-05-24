@@ -374,8 +374,23 @@ namespace AntDesign
 
         #region Title
 
+        private bool _draggable;
+
         [Parameter]
-        public bool Draggable { get; set; }
+        public bool Draggable
+        {
+            get
+            {
+                if (TreeComponent.DraggableExpression != null)
+                    return TreeComponent.DraggableExpression(this);
+                else
+                    return _draggable;
+            }
+            set
+            {
+                _draggable = value;
+            }
+        }
 
         private string _icon;
 
