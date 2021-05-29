@@ -105,6 +105,35 @@ namespace AntDesign
         }
 
         /// <summary>
+        /// Clone of above CreateModalAsync.
+        /// Needed the new name to avoid compiler confusion when using it using reflexion.
+        /// </summary>
+        /// <typeparam name="TComponent"></typeparam>
+        /// <typeparam name="TComponentOptions"></typeparam>
+        /// <param name="config"></param>
+        /// <param name="componentOptions"></param>
+        /// <returns></returns>
+        public Task<ModalRef> CreateDynamicModalAsync<TComponent, TComponentOptions>(ModalOptions config, TComponentOptions componentOptions) where TComponent : FeedbackComponent<TComponentOptions>
+        {
+            if (config == null)
+            {
+                throw new ArgumentNullException(nameof(config));
+            }
+            ModalRef modalRef = new ModalRef(config, this);
+
+            void Child(RenderTreeBuilder builder)
+            {
+                builder.OpenComponent<TComponent>(0);
+                builder.AddAttribute(1, "FeedbackRef", modalRef);
+                builder.AddAttribute(2, "Options", componentOptions);
+                builder.CloseComponent();
+            }
+            config.Content = Child;
+            config.ModalRef = modalRef;
+            return CreateOrOpenModalAsync(modalRef);
+        }
+
+        /// <summary>
         /// Create and open a Modal with template
         /// </summary>
         /// <typeparam name="TComponent"></typeparam>
