@@ -5,6 +5,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Text.Json;
 using System.Threading.Tasks;
+using AntDesign.Core.Helpers.MemberPath;
 using AntDesign.Internal;
 using AntDesign.JsInterop;
 using AntDesign.Select;
@@ -12,6 +13,7 @@ using AntDesign.Select.Internal;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using OneOf;
+using OneOf.Types;
 
 #pragma warning disable 1591 // Disable missing XML comment
 #pragma warning disable CA1716 // Disable Select name warning
@@ -50,7 +52,7 @@ namespace AntDesign
             get => _disabledName;
             set
             {
-                _getDisabled = string.IsNullOrWhiteSpace(value) ? null : SelectItemPropertyHelper.CreateGetDisabledFunc<TItem>(value);
+                _getDisabled = string.IsNullOrWhiteSpace(value) ? null : PathHelper.GetDelegate<TItem, bool>(value);
                 _disabledName = value;
             }
         }
@@ -64,7 +66,7 @@ namespace AntDesign
             get => _groupName;
             set
             {
-                _getGroup = string.IsNullOrWhiteSpace(value) ? null : SelectItemPropertyHelper.CreateGetGroupFunc<TItem>(value);
+                _getGroup = string.IsNullOrWhiteSpace(value) ? null : PathHelper.GetDelegate<TItem, string>(value);
                 _groupName = value;
             }
         }
@@ -84,10 +86,10 @@ namespace AntDesign
             get => _labelName;
             set
             {
-                _getLabel = SelectItemPropertyHelper.CreateGetLabelFunc<TItem>(value);
+                _getLabel = string.IsNullOrWhiteSpace(value) ? null : PathHelper.GetDelegate<TItem, string>(value);
                 if (SelectMode == SelectMode.Tags)
                 {
-                    _setLabel = SelectItemPropertyHelper.CreateSetLabelFunc<TItem>(value);
+                    _setLabel = string.IsNullOrWhiteSpace(value) ? null : PathHelper.SetDelegate<TItem, string>(value);
                 }
                 _labelName = value;
             }
@@ -178,8 +180,8 @@ namespace AntDesign
             get => _valueName;
             set
             {
-                _getValue = SelectItemPropertyHelper.CreateGetValueFunc<TItem, TItemValue>(value);
-                _setValue = SelectItemPropertyHelper.CreateSetValueFunc<TItem, TItemValue>(value);
+                _getValue = string.IsNullOrWhiteSpace(value) ? null : PathHelper.GetDelegate<TItem, TItemValue>(value);
+                _setValue = string.IsNullOrWhiteSpace(value) ? null : PathHelper.SetDelegate<TItem, TItemValue>(value);
                 _valueName = value;
             }
         }
@@ -438,7 +440,7 @@ namespace AntDesign
         internal List<SelectOptionItem<TItemValue, TItem>> SelectedOptionItems { get; } = new List<SelectOptionItem<TItemValue, TItem>>();
         internal List<SelectOptionItem<TItemValue, TItem>> AddedTags { get; } = new List<SelectOptionItem<TItemValue, TItem>>();
         internal SelectOptionItem<TItemValue, TItem> CustomTagSelectOptionItem { get; set; }
-
+        
         /// <summary>
         /// Currently active (highlighted) option.
         /// It does not have to be equal to selected option.
@@ -505,6 +507,11 @@ namespace AntDesign
         internal bool IsDropdownShown() => _dropDown.IsOverlayShow();
         protected override void OnInitialized()
         {
+            if (typeof(TItemValue) != typeof(TItem) && string.IsNullOrWhiteSpace(ValueName))
+            {
+                throw new ArgumentNullException(nameof(ValueName));
+            }
+
             SetClassMap();
 
             if (string.IsNullOrWhiteSpace(Style))
@@ -612,9 +619,6 @@ namespace AntDesign
         /// </summary>
         private void CreateDeleteSelectOptions()
         {
-            if (string.IsNullOrWhiteSpace(ValueName)) throw new ArgumentNullException(nameof(ValueName));
-            if (string.IsNullOrWhiteSpace(LabelName)) throw new ArgumentNullException(nameof(LabelName));
-
             if (_datasource == null)
                 return;
 
@@ -652,7 +656,7 @@ namespace AntDesign
 
             foreach (var item in _datasource)
             {
-                TItemValue value = _getValue(item);
+                TItemValue value = _getValue == null ? THelper.ChangeType<TItemValue>(item) : _getValue(item);
 
                 var exists = false;
                 SelectOptionItem<TItemValue, TItem> selectOption;
@@ -671,7 +675,7 @@ namespace AntDesign
 
                 var disabled = false;
                 var groupName = string.Empty;
-                var label = _getLabel(item);
+                var label = _getLabel == null ? GetLabel(item) : _getLabel(item);
 
                 bool isSelected = false;
                 if (processedSelectedCount > 0)
@@ -930,7 +934,9 @@ namespace AntDesign
                     SelectedOptionItems[0] = selectOption;
                 }
                 else
+                {
                     SelectedOptionItems.Add(selectOption);
+                }
 
                 selectOption.IsSelected = true;
                 await ValueChanged.InvokeAsync(selectOption.Value);
@@ -1013,7 +1019,9 @@ namespace AntDesign
                         firstEnabled.IsHidden = true;
 
                     if (SelectedOptionItems.Count == 0)
+                    {
                         SelectedOptionItems.Add(firstEnabled);
+                    }
                     else
                         SelectedOptionItems[0] = firstEnabled;
 
@@ -1063,7 +1071,9 @@ namespace AntDesign
 
                     _waittingStateChange = true;
                     if (SelectedOptionItems.Count == 0)
+                    {
                         SelectedOptionItems.Add(result);
+                    }
                     else
                         SelectedOptionItems[0] = result;
                     await ValueChanged.InvokeAsync(result.Value);
@@ -1229,9 +1239,16 @@ namespace AntDesign
             }
             else
             {
-                item = Activator.CreateInstance<TItem>();
-                _setLabel(item, _searchValue);
-                _setValue(item, value);
+                if (_setValue == null)
+                {
+                    item = THelper.ChangeType<TItem>(value);
+                }
+                else
+                {
+                    item = Activator.CreateInstance<TItem>();
+                    _setValue(item, value);
+                }
+                _setLabel?.Invoke(item, _searchValue);
             }
             return new SelectOptionItem<TItemValue, TItem>() { Label = label, Value = value, Item = item, IsActive = isActive, IsSelected = false, IsAddedTag = true };
         }
@@ -1315,6 +1332,11 @@ namespace AntDesign
                 await _dropDown.GetOverlayComponent().UpdatePosition();
         }
 
+        protected virtual string GetLabel(TItem item)
+        {
+            return item.ToString();
+        }
+
         #region Events
 
         /// <summary>
@@ -1385,7 +1407,9 @@ namespace AntDesign
                 }
             }
             else
+            {
                 SelectedOptionItems.Add(optionItem);
+            }
         }
 
         /// <summary>
@@ -1685,8 +1709,8 @@ namespace AntDesign
                     }
                     else
                     {
-                        _setLabel(CustomTagSelectOptionItem.Item, _searchValue);
-                        _setValue(CustomTagSelectOptionItem.Item, value);
+                        _setLabel?.Invoke(CustomTagSelectOptionItem.Item, _searchValue);
+                        _setValue?.Invoke(CustomTagSelectOptionItem.Item, value);
                     }
                 }
             }
