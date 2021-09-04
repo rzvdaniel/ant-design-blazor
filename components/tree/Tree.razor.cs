@@ -176,8 +176,6 @@ namespace AntDesign
             {
                 OnSelect.InvokeAsync(new TreeEventArgs<TItem>(this, treeNode));
             }
-
-            UpdateBindData();
         }
 
         /// <summary>
@@ -188,8 +186,6 @@ namespace AntDesign
         {
             if (SelectedNodesDictionary.ContainsKey(treeNode.NodeId) == true)
                 SelectedNodesDictionary.Remove(treeNode.NodeId);
-
-            UpdateBindData();
         }
 
         /// <summary>
@@ -263,7 +259,7 @@ namespace AntDesign
         /// <summary>
         /// Update binding data
         /// </summary>
-        private void UpdateBindData()
+        internal void UpdateBindData()
         {
             if (SelectedNodesDictionary.Count == 0)
             {

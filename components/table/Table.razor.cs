@@ -42,7 +42,7 @@ namespace AntDesign
 
         [Parameter]
         public RenderFragment<RowData<TItem>> ExpandTemplate { get; set; }
-        
+
         [Parameter]
         public bool DefaultExpandAllRows { get; set; }
 
@@ -149,14 +149,13 @@ namespace AntDesign
 
         private bool _hasFixLeft;
         private bool _hasFixRight;
-        private bool _pingRight;
-        private bool _pingLeft;
         private int _treeExpandIconColumnIndex;
         private ClassMapper _wrapperClassMapper = new ClassMapper();
         private string TableLayoutStyle => TableLayout == null ? "" : $"table-layout: {TableLayout};";
 
         private ElementReference _tableHeaderRef;
         private ElementReference _tableBodyRef;
+        private ElementReference _tableRef;
 
         private bool ServerSide => _hasRemoteDataSourceAttribute ? RemoteDataSource : Total > _dataSourceCount;
 
@@ -168,6 +167,7 @@ namespace AntDesign
         int ITable.ExpandIconColumnIndex => ExpandIconColumnIndex + (_selection != null && _selection.ColIndex <= ExpandIconColumnIndex ? 1 : 0);
         int ITable.TreeExpandIconColumnIndex => _treeExpandIconColumnIndex;
         bool ITable.HasExpandTemplate => ExpandTemplate != null;
+        TableLocale ITable.Locale => this.Locale;
 
         SortDirection[] ITable.SortDirections => SortDirections;
 
@@ -191,7 +191,7 @@ namespace AntDesign
 
             FlushCache();
 
-            this.Reload();
+            this.InternalReload();
         }
 
         public QueryModel GetQueryModel() => BuildQueryModel();
@@ -245,14 +245,14 @@ namespace AntDesign
 
         private void ReloadAndInvokeChange()
         {
-            var queryModel = this.Reload();
+            var queryModel = this.InternalReload();
             if (OnChange.HasDelegate)
             {
                 OnChange.InvokeAsync(queryModel);
             }
         }
 
-        private QueryModel<TItem> Reload()
+        private QueryModel<TItem> InternalReload()
         {
             var queryModel = BuildQueryModel();
 
@@ -296,6 +296,8 @@ namespace AntDesign
                         if (TotalChanged.HasDelegate) TotalChanged.InvokeAsync(_total);
                     }
                 }
+
+                _shouldRender = true;
             }
 
             _treeMode = TreeChildren != null && (_showItems?.Any(x => TreeChildren(x)?.Any() == true) == true);
@@ -303,7 +305,6 @@ namespace AntDesign
             {
                 _treeExpandIconColumnIndex = ExpandIconColumnIndex + (_selection != null && _selection.ColIndex <= ExpandIconColumnIndex ? 1 : 0);
             }
-            _waitingReload = false;
             StateHasChanged();
 
             return queryModel;
@@ -320,8 +321,8 @@ namespace AntDesign
                 .If($"{prefixCls}-fixed-column {prefixCls}-scroll-horizontal", () => ScrollX != null)
                 .If($"{prefixCls}-has-fix-left", () => _hasFixLeft)
                 .If($"{prefixCls}-has-fix-right", () => _hasFixRight)
-                .If($"{prefixCls}-ping-left", () => _pingLeft)
-                .If($"{prefixCls}-ping-right", () => _pingRight)
+                //.If($"{prefixCls}-ping-left", () => _pingLeft)
+                //.If($"{prefixCls}-ping-right", () => _pingRight)
                 .If($"{prefixCls}-rtl", () => RTL)
                 ;
 
@@ -351,8 +352,6 @@ namespace AntDesign
             InitializePagination();
 
             FlushCache();
-
-            ReloadAndInvokeChange();
         }
 
         protected override void OnAfterRender(bool firstRender)
@@ -363,6 +362,8 @@ namespace AntDesign
             {
                 this.FinishLoadPage();
             }
+
+            _shouldRender = false;
         }
 
         protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -371,18 +372,11 @@ namespace AntDesign
 
             if (firstRender)
             {
-                DomEventService.AddEventListener("window", "beforeunload", Reloading, false);
-                if (ScrollX != null)
-                {
-                    await SetScrollPositionClassName();
+                DomEventService.AddEventListener("window", "beforeunload", Reloading);
 
-                    DomEventService.AddEventListener("window", "resize", OnResize, false);
-                    DomEventService.AddEventListener(_tableBodyRef, "scroll", OnScroll);
-                }
-
-                if (ScrollY != null && ScrollX != null)
+                if (ScrollY != null || ScrollX != null)
                 {
-                    await JsInvokeAsync(JSInteropConstants.BindTableHeaderAndBodyScroll, _tableBodyRef, _tableHeaderRef);
+                    await JsInvokeAsync(JSInteropConstants.BindTableScroll, _tableBodyRef, _tableRef, _tableHeaderRef, ScrollX != null, ScrollY != null);
                 }
             }
         }
@@ -401,7 +395,7 @@ namespace AntDesign
             else if (_waitingReload)
             {
                 _waitingReload = false;
-                Reload();
+                InternalReload();
             }
 
             if (this.RenderMode == RenderMode.ParametersHashCodeChanged)
@@ -431,60 +425,8 @@ namespace AntDesign
             StateHasChanged();
         }
 
-        private async void OnResize(JsonElement _) => await SetScrollPositionClassName();
-
-        private async void OnScroll(JsonElement _) => await SetScrollPositionClassName();
-
-        private async Task SetScrollPositionClassName(bool clear = false)
-        {
-            if (_isReloading)
-                return;
-
-            var element = await JsInvokeAsync<HtmlElement>(JSInteropConstants.GetDomInfo, _tableBodyRef);
-            var scrollWidth = element.ScrollWidth;
-            var scrollLeft = element.ScrollLeft;
-            var clientWidth = element.ClientWidth;
-
-            var beforePingLeft = _pingLeft;
-            var beforePingRight = _pingRight;
-
-            if ((scrollWidth == clientWidth && scrollWidth != 0) || clear)
-            {
-                _pingLeft = false;
-                _pingRight = false;
-            }
-            else if (scrollLeft == 0)
-            {
-                _pingLeft = false;
-                _pingRight = true;
-            }
-            // allow the gap between 1 px, it's magic ✨
-            else if (Math.Abs(scrollWidth - (scrollLeft + clientWidth)) < 1)
-            {
-                _pingRight = false;
-                _pingLeft = true;
-            }
-            else
-            {
-                _pingLeft = true;
-                _pingRight = true;
-            }
-
-            if (beforePingLeft != _pingLeft || beforePingRight != _pingRight)
-            {
-                _shouldRender = true;
-            }
-
-            if (!clear)
-            {
-                StateHasChanged();
-            }
-        }
-
         protected override void Dispose(bool disposing)
         {
-            DomEventService.RemoveEventListerner<JsonElement>("window", "resize", OnResize);
-            DomEventService.RemoveEventListerner<JsonElement>(_tableBodyRef, "scroll", OnScroll);
             DomEventService.RemoveEventListerner<JsonElement>("window", "beforeunload", Reloading);
             base.Dispose(disposing);
         }
@@ -493,9 +435,9 @@ namespace AntDesign
         {
             if (!_isReloading)
             {
-                if (ScrollY != null && ScrollX != null)
+                if (ScrollY != null || ScrollX != null)
                 {
-                    await JsInvokeAsync(JSInteropConstants.UnbindTableHeaderAndBodyScroll, _tableBodyRef);
+                    await JsInvokeAsync(JSInteropConstants.UnbindTableScroll, _tableBodyRef);
                 }
             }
             DomEventService.RemoveEventListerner<JsonElement>("window", "beforeunload", Reloading);

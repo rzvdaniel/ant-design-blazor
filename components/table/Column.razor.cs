@@ -5,11 +5,9 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Linq.Expressions;
 using System.Reflection;
-using AntDesign.Core.Reflection;
 using AntDesign.Internal;
 using AntDesign.TableModels;
 using Microsoft.AspNetCore.Components;
-using System.Globalization;
 
 namespace AntDesign
 {
@@ -24,8 +22,6 @@ namespace AntDesign
         [Parameter]
         public Expression<Func<TData>> FieldExpression { get; set; }
 
-        [Parameter]
-        public RenderFragment<TData> CellRender { get; set; }
 
         [Parameter]
         public TData Field
@@ -70,7 +66,7 @@ namespace AntDesign
         public SortDirection DefaultSortOrder { get; set; }
 
         [Parameter]
-        public Func<RowData, Dictionary<string, object>> OnCell { get; set; }
+        public Func<CellData, Dictionary<string, object>> OnCell { get; set; }
 
         [Parameter]
         public Func<Dictionary<string, object>> OnHeaderCell { get; set; }
@@ -265,6 +261,8 @@ namespace AntDesign
                         ((List<TableFilter>)_filters).Add(nullFilterOption);
                     }
                 }
+
+                Context.HeaderColumnInitialed(this);
             }
 
             ClassMapper
@@ -336,15 +334,6 @@ namespace AntDesign
         {
             _sortDirection = sortDirection;
             SortModel?.SetSortDirection(sortDirection);
-        }
-
-        private void ToggleTreeNode()
-        {
-            bool expandValueBeforeChange = RowData.Expanded;
-            RowData.Expanded = !RowData.Expanded;
-            Table?.OnExpandChange(RowData.CacheKey);
-            if (RowData.Expanded != expandValueBeforeChange)
-                Table?.Refresh();
         }
 
         private void SetFilterCompareOperator(TableFilter filter, TableFilterCompareOperator compareOperator)
@@ -423,11 +412,22 @@ namespace AntDesign
 
         private TableFilter GetNewFilter()
         {
-            return new TableFilter()
+            if (_columnFilterType == TableFilterType.FieldType)
             {
-                FilterCondition = TableFilterCondition.And,
-                FilterCompareOperator = _columnDataType == typeof(string) ? TableFilterCompareOperator.Contains : TableFilterCompareOperator.Equals
-            };
+                return new TableFilter()
+                {
+                    FilterCondition = TableFilterCondition.And,
+                    FilterCompareOperator = _columnDataType == typeof(string) ? TableFilterCompareOperator.Contains : TableFilterCompareOperator.Equals
+                };
+            }
+            else
+            {
+                return new TableFilter()
+                {
+                    FilterCondition = TableFilterCondition.Or,
+                    FilterCompareOperator = TableFilterCompareOperator.Equals
+                };
+            }
         }
 
         private void InitFilters()

@@ -6,19 +6,18 @@
 }
 
 export class uploadHelper {
-  static addFileClickEventListener(btn: HTMLElement, event: string) {
+  static addFileClickEventListener(btn: HTMLElement) {
     if (btn.addEventListener) {
-      btn.addEventListener(event, this.fileClickEvent);
+      btn.addEventListener("click", uploadHelper.fileClickEvent);
     }
   }
 
-  static removeFileClickEventListener(btn: HTMLElement, event: string) {
-    btn.removeEventListener(event, this.fileClickEvent);
+  static removeFileClickEventListener(btn: HTMLElement) {
+    btn.removeEventListener("click", uploadHelper.fileClickEvent);
   }
 
   private static fileClickEvent(e: MouseEvent) {
     e.stopPropagation();
-    e.preventDefault();
     const fileId = (e.currentTarget as HTMLSpanElement).attributes["data-fileid"].nodeValue;
     const element = document.getElementById(fileId) as HTMLInputElement;
     element.click();
@@ -58,7 +57,7 @@ export class uploadHelper {
     return url;
   }
 
-  static uploadFile(element, index, data, headers, fileId, url, name, instance, percentMethod, successMethod, errorMethod) {
+  static uploadFile(element, index, data, headers, fileId, url, name, instance, percentMethod, successMethod, errorMethod, method: string) {
     let formData = new FormData();
     var file = element.files[index];
     var size = file.size;
@@ -86,7 +85,7 @@ export class uploadHelper {
     req.onerror = function (e) {
       instance.invokeMethodAsync(errorMethod, fileId, "error");
     }
-    req.open('post', url, true)
+    req.open(method, url, true)
     if (headers != null) {
       for (var header in headers) {
         req.setRequestHeader(header, headers[header]);
